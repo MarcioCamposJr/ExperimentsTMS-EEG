@@ -10,7 +10,7 @@ config_routers= APIRouter()
 @config_routers.post("/set-config")
 async def set_config(config: experiment.FingerTappingConfig, request: Request, background_tasks: BackgroundTasks):
     if not request.app.state.experiment['is_running']:
-        sequence = generate_sequence(config.movement_type, config.num_trials)
+        sequence = generate_sequence(config.movement_type, config.num_trials, config.mixed_task_types)
         background_tasks.add_task(start_exp, config,sequence, request.app)
         return {"message": "Experiment started in the background"}
 

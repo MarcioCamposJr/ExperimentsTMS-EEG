@@ -1,11 +1,12 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from enum import Enum
 
 class MovementType(str, Enum):
     unilateral = "Unilateral"
     bilateral = "Bilateral"
     bilateral_simultaneous = "Bilateral Simultâneo"
+    misto = "Misto"
 
 class FingerTappingStatus(str, Enum):
     running = "running"
@@ -22,6 +23,10 @@ class FingerTappingConfig(BaseModel):
     rest_duration_seconds: int
     movement_type: MovementType
     tms_time: float = 0
+    mixed_task_types: List[str] = []
+    tms_time_min: float = 0
+    tms_time_max: float = 0
+    prep_duration_seconds: float = 3
 
 class FingerTappingState(BaseModel):
     is_running: bool
