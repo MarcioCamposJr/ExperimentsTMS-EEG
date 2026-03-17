@@ -86,7 +86,10 @@ async def start_exp(config: FingerTappingConfig, sequence = [], app: FastAPI = N
         else:
             tms_delay = 0
 
-        app.state.experiment['trigger'] = pulsed = False
+        app.state.experiment['trigger'] = False
+        pulses_fired_count = 0
+        last_pulse_time_ms = 0
+        
         app.state.experiment['is_running'] = True
         app.state.experiment['color'] = dict_stimulus[stimulus]['color']
         app.state.experiment['instruction'] = dict_stimulus[stimulus]['instruction']
@@ -99,6 +102,7 @@ async def start_exp(config: FingerTappingConfig, sequence = [], app: FastAPI = N
             while not app.state.experiment['trigger']:
                 remaining_duration, total_duration = await elepesed_time(sleep_check_interval, remaining_duration, total_duration)
         trigger.pulse_default_trigger()
+        
         while remaining_duration > 0 and app.state.experiment['status'] != FingerTappingStatus.canceled:
             while app.state.experiment['status'] == FingerTappingStatus.paused:
                 await asyncio.sleep(sleep_check_interval)
@@ -111,19 +115,28 @@ async def start_exp(config: FingerTappingConfig, sequence = [], app: FastAPI = N
 
             app.state.experiment['remaining_duration'] = max(0, remaining_duration)
             app.state.experiment['time_remaining'] = max(0, total_duration)
-            if app.state.experiment['tms'] and tms_delay > 0 and remaining_duration - config.task_duration_seconds < -(tms_delay / 1000):
-                if navigation.navigation.is_connected():
-                    while not navigation.on_taget():
-                        while app.state.experiment['status'] == FingerTappingStatus.paused:
-                            await asyncio.sleep(sleep_check_interval)
-                            if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                                break
-                        if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                                break
-                        await asyncio.sleep(sleep_check_interval)
-                if not pulsed:
-                    pulsed = True
-                    trigger.pulse_tms_trigger()
+            
+            # Lógica de múltiplos pulsos TMS
+            if app.state.experiment['tms'] and tms_delay > 0 and pulses_fired_count < config.num_tms_pulses:
+                # O tempo já passou do tms_delay inicial?
+                if remaining_duration - config.task_duration_seconds < -(tms_delay / 1000):
+                    current_time_ms = time() * 1000
+                    
+                    # Pode disparar o primeiro pulso, ou verificar o intervalo para os próximos
+                    if pulses_fired_count == 0 or (current_time_ms - last_pulse_time_ms) >= config.tms_pulse_interval:
+                        if navigation.navigation.is_connected():
+                            while not navigation.on_taget():
+                                while app.state.experiment['status'] == FingerTappingStatus.paused:
+                                    await asyncio.sleep(sleep_check_interval)
+                                    if app.state.experiment['status'] == FingerTappingStatus.canceled:
+                                        break
+                                if app.state.experiment['status'] == FingerTappingStatus.canceled:
+                                        break
+                                await asyncio.sleep(sleep_check_interval)
+                        
+                        trigger.pulse_tms_trigger()
+                        pulses_fired_count += 1
+                        last_pulse_time_ms = time() * 1000
 
     payload_ws = websocket_helpers.build_payload(FingerTappingStimulus(is_running=False, color='gray', instruction='Finalizado'))
     await websocket_helpers.broadcast_state(app, payload_ws)

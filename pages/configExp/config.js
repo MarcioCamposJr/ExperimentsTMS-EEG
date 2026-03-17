@@ -134,6 +134,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             mixed_task_types: selectedTasks,
             tms_time_min: parseInt(document.getElementById('tms-stim-time-min').value || 0),
             tms_time_max: parseInt(document.getElementById('tms-stim-time-max').value || 0),
+            num_tms_pulses: parseInt(document.getElementById('num-tms-pulses').value || 1),
+            tms_pulse_interval: parseInt(document.getElementById('tms-pulse-interval').value || 100),
             tms_time: 0 // Fallback
         };
         

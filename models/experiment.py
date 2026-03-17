@@ -26,6 +26,8 @@ class FingerTappingConfig(BaseModel):
     mixed_task_types: List[str] = []
     tms_time_min: float = 0
     tms_time_max: float = 0
+    num_tms_pulses: int = 1
+    tms_pulse_interval: float = 0
     prep_duration_seconds: float = 3
 
 class FingerTappingState(BaseModel):
