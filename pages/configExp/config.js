@@ -52,17 +52,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Configuração de tarefa não encontrada');
             return
         }
+        // Os checkboxes agora são estáticos no HTML, então apenas mostramos/escondemos o grupo
         if(selectedTask.trialTypes.length > 0){
             trialTypeGroup.style.display = 'block';
-            trialTypeSelect.innerHTML = '';
-            selectedTask.trialTypes.forEach(type => {
-                const option = document.createElement('option');
-                option.value = type.replace(' ', '_');
-                option.textContent = type;
-                trialTypeSelect.appendChild(option);
-            });
         }else {
-            trialTypeGroup.style.display = 'none'
+            trialTypeGroup.style.display = 'none';
         }
     }
 
@@ -117,13 +111,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     startButton.addEventListener('click', async () => {
-        
+        const selectedCheckboxes = document.querySelectorAll('input[name="task-type"]:checked');
+        const selectedTasks = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+        let movementType = 'Unilateral';
+        if (selectedTasks.length === 1) {
+            movementType = selectedTasks[0];
+        } else if (selectedTasks.length > 1) {
+            movementType = 'Misto';
+        } else {
+            // Default caso nenhum selecionado
+            movementType = 'Mão Direita';
+            selectedTasks.push('Mão Direita');
+        }
+
         const config = {
             num_trials: parseInt(document.getElementById('num-trials').value || 10),
             task_duration_seconds: parseInt(document.getElementById('trial-duration').value || 5),
             rest_duration_seconds: parseInt(document.getElementById('trial-duration').value || 5),
-            movement_type: trialTypeSelect.value.replace('_', ' '),
-            tms_time: parseInt(document.getElementById('tms-stim-time').value || 0)
+            prep_duration_seconds: parseInt(document.getElementById('prep-duration').value || 3),
+            movement_type: movementType,
+            mixed_task_types: selectedTasks,
+            tms_time_min: parseInt(document.getElementById('tms-stim-time-min').value || 0),
+            tms_time_max: parseInt(document.getElementById('tms-stim-time-max').value || 0),
+            tms_time: 0 // Fallback
         };
         
         try{

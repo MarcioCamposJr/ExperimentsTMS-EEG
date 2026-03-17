@@ -35,10 +35,26 @@
                                 <label for="trial-duration">Tempo de cada trial (s)</label>
                                 <input type="number" id="trial-duration" name="trial-duration" value="5">
                             </div>
+                            <div class="form-group">
+                                <label for="prep-duration">Tempo de preparo (s)</label>
+                                <input type="number" id="prep-duration" name="prep-duration" value="3" min="0" step="1">
+                            </div>
                             <div class="form-group" id="trial-type-gruop">
-                                <label for="trial-type">Tipo de trial</label>
-                                <select id="trial-type" name="trial-type">
-                                </select>
+                                <label>Tipos de tarefa</label>
+                                <div class="checkbox-group" id="task-type-checkboxes">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="task-type" value="Mão Direita" checked>
+                                        <span>Mão Direita</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="task-type" value="Mão Esquerda">
+                                        <span>Mão Esquerda</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="task-type" value="Bilateral Simultâneo">
+                                        <span>Bilateral Simultâneo</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -93,8 +109,12 @@
                                     <button class="tms-toggle-button">Ativar TMS</button>
                                 </div>
                                 <div class="form-group">
-                                    <label for="tms-stim-time">Tempo do estímulo (ms)</label>
-                                    <input type="number" id="tms-stim-time" name="tms-stim-time" value="100">
+                                    <label for="tms-stim-time-min">TMS mín (ms)</label>
+                                    <input type="number" id="tms-stim-time-min" name="tms-stim-time-min" value="100" min="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="tms-stim-time-max">TMS máx (ms)</label>
+                                    <input type="number" id="tms-stim-time-max" name="tms-stim-time-max" value="500" min="0">
                                 </div>
                                 <div class="form-group">
                                     <label for="tms-intercalate">Intercalar entre trials</label>
