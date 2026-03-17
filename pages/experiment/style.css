@@ -52,6 +52,34 @@ body {
     background-color: #FF4136; /* Vermelho para "relaxe" */
 }
 
+.countdown-text {
+    font-size: 4rem;
+    font-weight: 700;
+    color: #FFDC00; /* Yellow */
+    margin: 20px 0 0 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.countdown-text.active {
+    opacity: 1;
+    animation: popIn 0.5s ease;
+}
+
+@keyframes popIn {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    80% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
 /* Responsividade */
 @media (max-width: 600px) {
     .stimulus-circle {
@@ -61,5 +89,9 @@ body {
 
     .instruction-text {
         font-size: 1.5rem;
+    }
+    
+    .countdown-text {
+        font-size: 3rem;
     }
 }
