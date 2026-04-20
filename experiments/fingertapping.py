@@ -149,6 +149,7 @@ async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfi
 
                 if exp['status'] != ExperimentStatus.canceled:
                     trigger.pulse_tms_trigger(code=tms_trigger_code)
+                    await asyncio.shield(tms.single_pulse())
                     fired_count += 1
 
 
@@ -200,6 +201,7 @@ async def _run_prep_phase(app, duration, pulse_config: PulseConfig, total_remain
                         await asyncio.sleep(SLEEP_INTERVAL)
                 if exp['status'] != ExperimentStatus.canceled:
                     trigger.pulse_tms_trigger(code=tms_trigger_code)
+                    await asyncio.shield(tms.single_pulse())
                     fired_count += 1
 
 
