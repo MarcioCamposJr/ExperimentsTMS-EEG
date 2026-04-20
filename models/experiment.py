@@ -88,5 +88,7 @@ class ExperimentStimulus(BaseModel):
     is_running: bool
     color: str
     instruction: str
+    phase: str = "rest"
+    target: int = 0  # 1=Right, 2=Left, 3=Bilateral
 
 FingerTappingStimulus = ExperimentStimulus

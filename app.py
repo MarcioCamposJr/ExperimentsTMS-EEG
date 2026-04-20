@@ -24,6 +24,7 @@ clients: set[WebSocket] = set()
 
 app.mount("/static", StaticFiles(directory="pages"), name="static")
 app.mount("/utils", StaticFiles(directory="utils"), name="utils")
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 app.include_router(router_pages)
 app.include_router(config_routers)

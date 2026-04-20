@@ -50,9 +50,13 @@ async def get_state_exp(request: Request):
 @config_routers.get("/stimulus-exp")
 async def set_stimulus(request: Request):
     exp_state = request.app.state.experiment
-    return experiment.ExperimentStimulus(is_running=exp_state.get('is_running'),
-                                 color=exp_state.get('color'),
-                                 instruction=exp_state.get('instruction'))
+    return experiment.ExperimentStimulus(
+        is_running=exp_state.get('is_running', False),
+        color=exp_state.get('color', 'gray'),
+        instruction=exp_state.get('instruction', ''),
+        phase=exp_state.get('phase', 'rest'),
+        target=exp_state.get('target', 0)
+    )
 
 @config_routers.post("/status-exp")
 async def set_stimulus(status: experiment.StatusPayload, request: Request):

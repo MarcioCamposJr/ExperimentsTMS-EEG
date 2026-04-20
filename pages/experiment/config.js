@@ -1,52 +1,49 @@
 document.addEventListener('DOMContentLoaded', ()=>{
-    const circleElement = document.getElementById('stimulus-circle');
-    const instructionElement = document.getElementById('instruction-text');
-    const countdownElement = document.getElementById('countdown-text');
+    const handleStimulus = (isRunning, instruction, phase, target) => {
+        const handLeft = document.getElementById('hand-left');
+        const handRight = document.getElementById('hand-right');
+        const cross = document.getElementById('focus-cross');
 
-    const handleStimulus = (isRunning, color, instruction) => {
+        // Logic to determine active hands based on target (1=Right, 2=Left, 3=Bilateral)
+        let isLeftActive = (target === 2 || target === 3);
+        let isRightActive = (target === 1 || target === 3);
+
         if (isRunning) {
-            circleElement.style.backgroundColor = color;
-            
-            // Check for preparation phase (e.g. "Prepare-se... 3")
-            if (instruction.startsWith("Prepare-se")) {
-                const parts = instruction.split("...");
-                instructionElement.textContent = parts[0];
-                if (parts.length > 1) {
-                    countdownElement.textContent = parts[1].trim();
-                    countdownElement.classList.add('active'); // Para animação
-                }
+            // Apply hands opacity based on active state (only active during prep and task)
+            if (phase === 'prep' || phase === 'task') {
+                handLeft.classList.toggle('active', isLeftActive);
+                handRight.classList.toggle('active', isRightActive);
             } else {
-                instructionElement.textContent = instruction;
-                countdownElement.textContent = '';
-                countdownElement.classList.remove('active');
+                handLeft.classList.remove('active');
+                handRight.classList.remove('active');
             }
+
+            // Cross turns red only during task phase
+            cross.classList.toggle('active', phase === 'task');
         } else {
-            circleElement.style.backgroundColor = 'gray';
-            instructionElement.textContent = 'Aguarde';
-            countdownElement.textContent = '';
-            countdownElement.classList.remove('active');
+            handLeft.classList.remove('active');
+            handRight.classList.remove('active');
+            cross.classList.remove('active');
         }
     };
 
     const updateStimulus = async() => {
-        try{
-
+        try {
             const response = await fetch('/stimulus-exp');
             const data = await response.json();
-            
-            handleStimulus(data.is_running, data.color, data.instruction);
+            handleStimulus(data.is_running, data.instruction, data.phase, data.target);
         } catch (error) {
             console.error("Erro ao buscar estímulo:", error);
         }
-    }
+    };
 
     function connect() {
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         console.log(`${proto}://${location.host}/ws/stimulus`);
         const ws = new WebSocket(`${proto}://${location.host}/ws/stimulus`);
         ws.onmessage = (ev) => {
-            const { r, c, i } = JSON.parse(ev.data);
-            handleStimulus(r, c, i);
+            const { r, c, i, p, t } = JSON.parse(ev.data);
+            handleStimulus(r, i, p, t);
             ws.send(JSON.stringify({trigger: true}));
         };
         ws.onclose = () => setTimeout(connect, 500);

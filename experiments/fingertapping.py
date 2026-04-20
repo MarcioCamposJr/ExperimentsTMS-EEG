@@ -66,12 +66,14 @@ async def start_exp(config: ExperimentConfig, sequence: list, app: FastAPI):
         # Phase 1: REST
         await _run_phase(app, rest_dur, "gray", "Descanse",
                          config.pulse_rest, total_remaining,
-                         trigger_code=codes.rest, tms_trigger_code=codes.tms_pulse)
+                         trigger_code=codes.rest, tms_trigger_code=codes.tms_pulse,
+                         phase_name="rest", target=task_code)
         if exp['status'] == ExperimentStatus.canceled: break
 
         # Phase 2: PREP
         await _run_prep_phase(app, prep_dur, config.pulse_prep, total_remaining,
-                              trigger_code=codes.prep, tms_trigger_code=codes.tms_pulse)
+                              trigger_code=codes.prep, tms_trigger_code=codes.tms_pulse,
+                              target=task_code)
         if exp['status'] == ExperimentStatus.canceled: break
 
         # Phase 3: TASK
@@ -80,17 +82,19 @@ async def start_exp(config: ExperimentConfig, sequence: list, app: FastAPI):
         task_trigger_code = getattr(codes, task_trigger_key, codes.task_right)
         await _run_phase(app, task_dur, stim['color'], stim['instruction'],
                          config.pulse_task, total_remaining,
-                         trigger_code=task_trigger_code, tms_trigger_code=codes.tms_pulse)
+                         trigger_code=task_trigger_code, tms_trigger_code=codes.tms_pulse,
+                         phase_name="task", target=task_code)
 
     payload = websocket_helpers.build_payload(
-        ExperimentStimulus(is_running=False, color='gray', instruction='Finalizado')
+        ExperimentStimulus(is_running=False, color='gray', instruction='Finalizado', phase='finished', target=0)
     )
     await websocket_helpers.broadcast_state(app, payload)
     exp['is_running'] = False
 
 
 async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfig,
-                     total_remaining: list, trigger_code=None, tms_trigger_code=None):
+                     total_remaining: list, trigger_code=None, tms_trigger_code=None,
+                     phase_name="rest", target=0):
     """Run a timed phase (rest or task) with per-pulse TMS firing."""
     exp = app.state.experiment
     if exp['status'] == ExperimentStatus.canceled:
@@ -98,9 +102,11 @@ async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfi
 
     exp['color'] = color
     exp['instruction'] = instruction
+    exp['phase'] = phase_name
+    exp['target'] = target
     exp['trigger'] = False
     payload = websocket_helpers.build_payload(
-        ExperimentStimulus(is_running=True, color=color, instruction=instruction)
+        ExperimentStimulus(is_running=True, color=color, instruction=instruction, phase=phase_name, target=target)
     )
 
     if not await websocket_helpers.broadcast_state(app, payload):
@@ -147,7 +153,7 @@ async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfi
 
 
 async def _run_prep_phase(app, duration, pulse_config: PulseConfig, total_remaining: list,
-                          trigger_code=None, tms_trigger_code=None):
+                          trigger_code=None, tms_trigger_code=None, target=0):
     """Run preparation phase with countdown and per-pulse TMS firing."""
     exp = app.state.experiment
     if duration <= 0 or exp['status'] == ExperimentStatus.canceled:
@@ -161,24 +167,21 @@ async def _run_prep_phase(app, duration, pulse_config: PulseConfig, total_remain
 
     phase_start = time()
     remaining = duration
-    last_shown_count = -1
+    # Send payload once for the prep phase
+    exp['color'] = 'yellow'
+    exp['instruction'] = 'Prepare-se'
+    exp['phase'] = 'prep'
+    exp['target'] = target
+    payload = websocket_helpers.build_payload(
+        ExperimentStimulus(is_running=True, color='yellow', instruction='Prepare-se', phase='prep', target=target)
+    )
+    await websocket_helpers.broadcast_state(app, payload)
 
     while remaining > 0:
         if exp['status'] == ExperimentStatus.canceled: return
         while exp['status'] == ExperimentStatus.paused:
             await asyncio.sleep(SLEEP_INTERVAL)
             if exp['status'] == ExperimentStatus.canceled: return
-
-        count = math.ceil(remaining)
-        if count != last_shown_count and count > 0:
-            instruction = f"Prepare-se... {count}"
-            exp['color'] = 'yellow'
-            exp['instruction'] = instruction
-            payload = websocket_helpers.build_payload(
-                ExperimentStimulus(is_running=True, color='yellow', instruction=instruction)
-            )
-            await websocket_helpers.broadcast_state(app, payload)
-            last_shown_count = count
 
         remaining, total_remaining[0] = await elepesed_time(SLEEP_INTERVAL, remaining, total_remaining[0])
         exp['remaining_duration'] = max(0, remaining)

@@ -24,74 +24,79 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    width: 100vw;
+    height: 100vh;
 }
 
-.stimulus-circle {
-    width: 200px;
-    height: 200px;
-    background-color: var(--circle-default-color);
-    border-radius: 50%;
-    margin-bottom: 40px;
-    /* Adiciona uma transição suave para a mudança de cor */
-    transition: background-color 0.5s ease;
+.hands-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8vw;
+    width: 100%;
+    max-width: 1200px;
 }
 
-.instruction-text {
-    font-size: 2rem;
-    font-weight: 400;
-    color: var(--text-color-dark);
-    margin: 0;
-}
-
-/* Classes de exemplo para mudança de cor (serão ativadas via JS) */
-.stimulus-circle.active {
-    background-color: #00BFFF; /* Azul para "faça o movimento" */
-}
-
-.stimulus-circle.relax {
-    background-color: #FF4136; /* Vermelho para "relaxe" */
-}
-
-.countdown-text {
-    font-size: 4rem;
-    font-weight: 700;
-    color: #FFDC00; /* Yellow */
-    margin: 20px 0 0 0;
-    opacity: 0;
+.hand-image {
+    width: 25vw;
+    max-width: 300px;
+    height: auto;
+    object-fit: contain;
+    opacity: 0.2; /* Rest/fade state */
     transition: opacity 0.3s ease;
 }
 
-.countdown-text.active {
-    opacity: 1;
-    animation: popIn 0.5s ease;
+.hand-image.active {
+    opacity: 1; /* Active state */
 }
 
-@keyframes popIn {
-    0% {
-        transform: scale(0.5);
-        opacity: 0;
-    }
-    80% {
-        transform: scale(1.1);
-        opacity: 1;
-    }
-    100% {
-        transform: scale(1);
-    }
+.center-focus {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 100px;
+}
+
+.cross {
+    position: relative;
+    width: 80px;
+    height: 80px;
+}
+
+.cross .line {
+    position: absolute;
+    background-color: #666666; /* gray by default */
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+
+.cross.active .line {
+    background-color: #FF4136; /* red for movement task */
+}
+
+.cross .line-v {
+    width: 10px;
+    height: 100%;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cross .line-h {
+    width: 100%;
+    height: 10px;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
 }
 
 /* Responsividade */
-@media (max-width: 600px) {
-    .stimulus-circle {
-        width: 150px;
-        height: 150px;
-    }
-
-    .instruction-text {
-        font-size: 1.5rem;
-    }
-    
-    .countdown-text {
-        font-size: 3rem;
+@media (max-width: 800px) {
+    .hands-container {
+        gap: 4vw;
     }
 }
+

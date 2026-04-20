@@ -5,23 +5,13 @@ const TASK_CONFIG = [
 ];
 
 // ===== STATE =====
-const phaseState = {
-    rest: {
-        duration: 5, jitter: 0,
-        pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] }
-    },
-    prep: {
-        duration: 3, jitter: 0,
-        pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] }
-    },
-    task: {
-        duration: 5, jitter: 0,
-        pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] },
-        taskTypes: ['Mão Direita']
-    }
+let phaseState = {
+    rest: { duration: 5, jitter: 0, pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] } },
+    prep: { duration: 3, jitter: 0, pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] } },
+    task: { duration: 5, jitter: 0, pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] }, taskTypes: ['Mão Direita'] }
 };
 
-const triggerCodes = {
+let triggerCodes = {
     rest: 1, prep: 2, task_right: 3, task_left: 4, task_bilateral: 5, tms_pulse: 10
 };
 
@@ -372,6 +362,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ===== INIT =====
+    try {
+        const defResp = await fetch('/default-config');
+        if (defResp.ok) {
+            const defJson = await defResp.json();
+            if (defJson.num_trials) numTrials.value = defJson.num_trials;
+            if (defJson.tms_intensity) document.getElementById('tms-intensity').value = defJson.tms_intensity;
+            if (defJson.randomize !== undefined) {
+                randomizeToggle.checked = defJson.randomize;
+                seedGroup.style.display = defJson.randomize ? 'flex' : 'none';
+            }
+            if (defJson.seed) seedValue.value = defJson.seed;
+            
+            if (defJson.trigger_codes) triggerCodes = { ...triggerCodes, ...defJson.trigger_codes };
+            if (defJson.phases) {
+                // Ensure pulse points are structured properly
+                for (const phaseKey of ['rest', 'prep', 'task']) {
+                    if (defJson.phases[phaseKey]) {
+                        phaseState[phaseKey] = { ...phaseState[phaseKey], ...defJson.phases[phaseKey] };
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Nenhum default_config.json encontrado ou erro de parse:", e);
+    }
+
     try {
         await fetchAndPopulateDropdown('/ports-tms', document.getElementById('tms-port'), 'name', 'description');
         await checkDeviceStatus('/get-connection-tms', tmsIndicator, tmsText, 'Conectado', 'Desconectado', { 'tms-port': 'port' });
