@@ -16,6 +16,11 @@ async def enable(enable):
         else:
             stim.magventure_device.disarm()
 
+async def set_intensity(intensity: int):
+    """Set TMS stimulation intensity (0-100% MSO)."""
+    if stim.is_connected:
+        stim.magventure_device.set_amplitude(intensity)
+
 async def single_pulse():
     if stim.is_connected:
         stim.magventure_device.fire()

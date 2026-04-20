@@ -1,191 +1,232 @@
-from models.experiment import FingerTappingConfig, FingerTappingStatus, FingerTappingStimulus
+from models.experiment import ExperimentConfig, ExperimentStatus, ExperimentStimulus, PulseConfig
 from utils import trigger, tms, navigation, websocket_helpers
 from utils.experimental_helpers import elepesed_time
 
 import asyncio
+import math
 import random
 from fastapi import FastAPI
-from time import time, perf_counter
-import threading
+from time import time
 
 dict_stimulus = {
-    0: {"instruction": "Descanse", "color": "gray"},
     1: {"instruction": "Mão Direita", "color": "green"},
     2: {"instruction": "Mão Esquerda", "color": "blue"},
     3: {"instruction": "Mexa a Mão", "color": "green"},
-    4: {"instruction": "Prepare-se", "color": "yellow"}
 }
 
-sleep_check_interval = 0.001 
+# Map stimulus code to trigger code field name
+STIMULUS_TO_TRIGGER_KEY = {
+    1: "task_right",
+    2: "task_left",
+    3: "task_bilateral",
+}
 
-async def run_prep_phase(config: FingerTappingConfig, app: FastAPI):
-    """Exibe tela de preparo com contagem regressiva antes de cada trial."""
-    prep_duration = config.prep_duration_seconds
-    if prep_duration <= 0:
+SLEEP_INTERVAL = 0.001
+
+
+def _compute_fire_times(pulse_config: PulseConfig, tms_enabled: bool):
+    """Pre-compute sorted list of fire times (seconds) for a phase."""
+    if not pulse_config or not pulse_config.enabled or not tms_enabled:
+        return []
+    fire_times = []
+    for p in pulse_config.pulses:
+        t = (p.position_ms + random.uniform(-p.jitter_ms, p.jitter_ms)) / 1000.0
+        fire_times.append(max(0, t))
+    fire_times.sort()
+    return fire_times
+
+
+async def start_exp(config: ExperimentConfig, sequence: list, app: FastAPI):
+    """Main experiment loop. Sequence contains task stimulus codes (1, 2, 3)."""
+    exp = app.state.experiment
+    exp['is_running'] = True
+    exp['total_trial'] = len(sequence)
+    exp['status'] = ExperimentStatus.running
+    exp['remaining_duration'] = 0
+    exp['time_remaining'] = 0
+    exp['exp_start_time'] = time()
+
+    codes = config.trigger_codes
+
+    trial_avg = config.rest.duration_seconds + config.prep.duration_seconds + config.task.duration_seconds
+    total_remaining = [trial_avg * len(sequence)]
+
+    for idx, task_code in enumerate(sequence):
+        if exp['status'] == ExperimentStatus.canceled:
+            break
+        exp['current_step'] = idx
+
+        rest_dur = max(0.1, config.rest.duration_seconds + random.uniform(
+            -config.rest.jitter_seconds, config.rest.jitter_seconds))
+        prep_dur = max(0, config.prep.duration_seconds + random.uniform(
+            -config.prep.jitter_seconds, config.prep.jitter_seconds))
+        task_dur = max(0.1, config.task.duration_seconds + random.uniform(
+            -config.task.jitter_seconds, config.task.jitter_seconds))
+
+        # Phase 1: REST
+        await _run_phase(app, rest_dur, "gray", "Descanse",
+                         config.pulse_rest, total_remaining,
+                         trigger_code=codes.rest, tms_trigger_code=codes.tms_pulse)
+        if exp['status'] == ExperimentStatus.canceled: break
+
+        # Phase 2: PREP
+        await _run_prep_phase(app, prep_dur, config.pulse_prep, total_remaining,
+                              trigger_code=codes.prep, tms_trigger_code=codes.tms_pulse)
+        if exp['status'] == ExperimentStatus.canceled: break
+
+        # Phase 3: TASK
+        stim = dict_stimulus.get(task_code, {"instruction": "Tarefa", "color": "green"})
+        task_trigger_key = STIMULUS_TO_TRIGGER_KEY.get(task_code, "task_right")
+        task_trigger_code = getattr(codes, task_trigger_key, codes.task_right)
+        await _run_phase(app, task_dur, stim['color'], stim['instruction'],
+                         config.pulse_task, total_remaining,
+                         trigger_code=task_trigger_code, tms_trigger_code=codes.tms_pulse)
+
+    payload = websocket_helpers.build_payload(
+        ExperimentStimulus(is_running=False, color='gray', instruction='Finalizado')
+    )
+    await websocket_helpers.broadcast_state(app, payload)
+    exp['is_running'] = False
+
+
+async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfig,
+                     total_remaining: list, trigger_code=None, tms_trigger_code=None):
+    """Run a timed phase (rest or task) with per-pulse TMS firing."""
+    exp = app.state.experiment
+    if exp['status'] == ExperimentStatus.canceled:
         return
 
-    countdown = int(prep_duration)
-    while countdown > 0:
-        if app.state.experiment['status'] == FingerTappingStatus.canceled:
-            return
+    exp['color'] = color
+    exp['instruction'] = instruction
+    exp['trigger'] = False
+    payload = websocket_helpers.build_payload(
+        ExperimentStimulus(is_running=True, color=color, instruction=instruction)
+    )
 
-        while app.state.experiment['status'] == FingerTappingStatus.paused:
-            await asyncio.sleep(sleep_check_interval)
-            if app.state.experiment['status'] == FingerTappingStatus.canceled:
+    if not await websocket_helpers.broadcast_state(app, payload):
+        while not exp['trigger']:
+            if exp['status'] == ExperimentStatus.canceled:
                 return
+            _, total_remaining[0] = await elepesed_time(SLEEP_INTERVAL, duration, total_remaining[0])
+    trigger.pulse_default_trigger(code=trigger_code)
 
-        instruction = f"Prepare-se... {countdown}"
-        payload_ws = websocket_helpers.build_payload(
-            FingerTappingStimulus(is_running=True, color='yellow', instruction=instruction)
-        )
-        app.state.experiment['color'] = 'yellow'
-        app.state.experiment['instruction'] = instruction
-        await websocket_helpers.broadcast_state(app, payload_ws)
+    # Compute fire times for each configured pulse
+    fire_times = _compute_fire_times(pulse_config, exp.get('tms', False))
+    fired_count = 0
 
-        # Aguardar 1 segundo para cada contagem
-        start = time()
-        while (time() - start) < 1.0:
-            if app.state.experiment['status'] == FingerTappingStatus.canceled:
+    remaining = duration
+    phase_start = time()
+
+    while remaining > 0 and exp['status'] != ExperimentStatus.canceled:
+        while exp['status'] == ExperimentStatus.paused:
+            await asyncio.sleep(SLEEP_INTERVAL)
+            if exp['status'] == ExperimentStatus.canceled:
                 return
-            while app.state.experiment['status'] == FingerTappingStatus.paused:
-                await asyncio.sleep(sleep_check_interval)
-                if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                    return
-            await asyncio.sleep(sleep_check_interval)
-
-        countdown -= 1
-
-
-async def start_exp(config: FingerTappingConfig, sequence = [], app: FastAPI = None):
-    app.state.experiment['is_running'] = True
-    app.state.experiment['total_trial'] = config.num_trials
-    app.state.experiment['trial_duration'] = config.task_duration_seconds
-    app.state.experiment['status'] = FingerTappingStatus.running
-    app.state.experiment['remaining_duration'] = 0
-    app.state.experiment['time_remaining'] = 0
-
-    exp_start_time = time()
-    app.state.experiment['exp_start_time'] = exp_start_time
-    total_duration = config.task_duration_seconds * config.num_trials
-
-    for idx_trial, stimulus in enumerate(sequence):
-        if app.state.experiment['status'] == FingerTappingStatus.canceled:
+        if exp['status'] == ExperimentStatus.canceled:
             break
 
-        # --- Fase de preparo (antes de cada trial de tarefa, não de repouso) ---
-        if stimulus != 0:
-            await run_prep_phase(config, app)
-            if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                break
+        remaining, total_remaining[0] = await elepesed_time(SLEEP_INTERVAL, remaining, total_remaining[0])
+        exp['remaining_duration'] = max(0, remaining)
+        exp['time_remaining'] = max(0, total_remaining[0])
 
-        # --- Sortear tempo TMS aleatório para este trial ---
-        if config.tms_time_min > 0 and config.tms_time_max > 0 and config.tms_time_max >= config.tms_time_min:
-            tms_delay = random.uniform(config.tms_time_min, config.tms_time_max)
-        elif config.tms_time > 0:
-            tms_delay = config.tms_time
-        else:
-            tms_delay = 0
+        # Fire pulses at their scheduled times
+        if fired_count < len(fire_times):
+            elapsed = time() - phase_start
+            if elapsed >= fire_times[fired_count]:
+                if navigation.navigation.is_connected():
+                    while not navigation.on_taget():
+                        while exp['status'] == ExperimentStatus.paused:
+                            await asyncio.sleep(SLEEP_INTERVAL)
+                            if exp['status'] == ExperimentStatus.canceled: break
+                        if exp['status'] == ExperimentStatus.canceled: break
+                        await asyncio.sleep(SLEEP_INTERVAL)
 
-        app.state.experiment['trigger'] = False
-        pulses_fired_count = 0
-        last_pulse_time_ms = 0
-        
-        app.state.experiment['is_running'] = True
-        app.state.experiment['color'] = dict_stimulus[stimulus]['color']
-        app.state.experiment['instruction'] = dict_stimulus[stimulus]['instruction']
-        payload_ws = websocket_helpers.build_payload(FingerTappingStimulus(is_running=True, color=dict_stimulus[stimulus]['color'], instruction=dict_stimulus[stimulus]['instruction']))
-        app.state.experiment['current_step'] = idx_trial
-        app.state.experiment['trial_start_time'] = time()
-        remaining_duration = config.task_duration_seconds
+                if exp['status'] != ExperimentStatus.canceled:
+                    trigger.pulse_tms_trigger(code=tms_trigger_code)
+                    fired_count += 1
 
-        if not await websocket_helpers.broadcast_state(app, payload_ws):
-            while not app.state.experiment['trigger']:
-                remaining_duration, total_duration = await elepesed_time(sleep_check_interval, remaining_duration, total_duration)
-        trigger.pulse_default_trigger()
-        
-        while remaining_duration > 0 and app.state.experiment['status'] != FingerTappingStatus.canceled:
-            while app.state.experiment['status'] == FingerTappingStatus.paused:
-                await asyncio.sleep(sleep_check_interval)
-                if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                    break 
-            if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                break
 
-            remaining_duration, total_duration = await elepesed_time(sleep_check_interval, remaining_duration, total_duration)
+async def _run_prep_phase(app, duration, pulse_config: PulseConfig, total_remaining: list,
+                          trigger_code=None, tms_trigger_code=None):
+    """Run preparation phase with countdown and per-pulse TMS firing."""
+    exp = app.state.experiment
+    if duration <= 0 or exp['status'] == ExperimentStatus.canceled:
+        return
 
-            app.state.experiment['remaining_duration'] = max(0, remaining_duration)
-            app.state.experiment['time_remaining'] = max(0, total_duration)
-            
-            # Lógica de múltiplos pulsos TMS
-            if app.state.experiment['tms'] and tms_delay > 0 and pulses_fired_count < config.num_tms_pulses:
-                # O tempo já passou do tms_delay inicial?
-                if remaining_duration - config.task_duration_seconds < -(tms_delay / 1000):
-                    current_time_ms = time() * 1000
-                    
-                    # Pode disparar o primeiro pulso, ou verificar o intervalo para os próximos
-                    if pulses_fired_count == 0 or (current_time_ms - last_pulse_time_ms) >= config.tms_pulse_interval:
-                        if navigation.navigation.is_connected():
-                            while not navigation.on_taget():
-                                while app.state.experiment['status'] == FingerTappingStatus.paused:
-                                    await asyncio.sleep(sleep_check_interval)
-                                    if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                                        break
-                                if app.state.experiment['status'] == FingerTappingStatus.canceled:
-                                        break
-                                await asyncio.sleep(sleep_check_interval)
-                        
-                        trigger.pulse_tms_trigger()
-                        pulses_fired_count += 1
-                        last_pulse_time_ms = time() * 1000
+    # Send trigger code for prep phase start
+    trigger.pulse_default_trigger(code=trigger_code)
 
-    payload_ws = websocket_helpers.build_payload(FingerTappingStimulus(is_running=False, color='gray', instruction='Finalizado'))
-    await websocket_helpers.broadcast_state(app, payload_ws)
-    app.state.experiment['is_running'] = False
+    fire_times = _compute_fire_times(pulse_config, exp.get('tms', False))
+    fired_count = 0
 
-def generate_sequence(taskType, num_trials, mixed_types=None):
-    # Mapeamento de nomes de tipo para códigos de estímulo
+    phase_start = time()
+    remaining = duration
+    last_shown_count = -1
+
+    while remaining > 0:
+        if exp['status'] == ExperimentStatus.canceled: return
+        while exp['status'] == ExperimentStatus.paused:
+            await asyncio.sleep(SLEEP_INTERVAL)
+            if exp['status'] == ExperimentStatus.canceled: return
+
+        count = math.ceil(remaining)
+        if count != last_shown_count and count > 0:
+            instruction = f"Prepare-se... {count}"
+            exp['color'] = 'yellow'
+            exp['instruction'] = instruction
+            payload = websocket_helpers.build_payload(
+                ExperimentStimulus(is_running=True, color='yellow', instruction=instruction)
+            )
+            await websocket_helpers.broadcast_state(app, payload)
+            last_shown_count = count
+
+        remaining, total_remaining[0] = await elepesed_time(SLEEP_INTERVAL, remaining, total_remaining[0])
+        exp['remaining_duration'] = max(0, remaining)
+        exp['time_remaining'] = max(0, total_remaining[0])
+
+        # Fire pulses at scheduled times
+        if fired_count < len(fire_times):
+            elapsed = time() - phase_start
+            if elapsed >= fire_times[fired_count]:
+                if navigation.navigation.is_connected():
+                    while not navigation.on_taget():
+                        while exp['status'] == ExperimentStatus.paused:
+                            await asyncio.sleep(SLEEP_INTERVAL)
+                            if exp['status'] == ExperimentStatus.canceled: break
+                        if exp['status'] == ExperimentStatus.canceled: break
+                        await asyncio.sleep(SLEEP_INTERVAL)
+                if exp['status'] != ExperimentStatus.canceled:
+                    trigger.pulse_tms_trigger(code=tms_trigger_code)
+                    fired_count += 1
+
+
+def generate_sequence(movement_type, num_trials, mixed_types=None, randomize=False, seed=None):
+    """Generate sequence of task stimulus codes (1, 2, 3)."""
     type_to_stimulus = {
-        "Unilateral": 1,
         "Mão Direita": 1,
         "Mão Esquerda": 2,
         "Bilateral Simultâneo": 3,
     }
 
-    if taskType == "Misto" and mixed_types and len(mixed_types) > 0:
-        # Gerar lista de estímulos com base nos tipos selecionados
-        stimulus_codes = []
-        for t in mixed_types:
-            code = type_to_stimulus.get(t, None)
-            if code is not None:
-                stimulus_codes.append(code)
-        
-        if not stimulus_codes:
-            stimulus_codes = [1]  # fallback para mão direita
+    if seed is not None:
+        random.seed(seed)
 
-        # Criar pares (repouso + estímulo) randomizados
-        pairs = []
-        for i in range(num_trials // 2):
-            stimulus = random.choice(stimulus_codes)
-            pairs.append((0, stimulus))
-
-        random.shuffle(pairs)
-        
-        sequence = []
-        for rest, stim in pairs:
-            sequence.append(rest)
-            sequence.append(stim)
-
-        return sequence[:num_trials]
-    
-    elif taskType == "Unilateral":
-        padrao = [0, 1]
-    elif taskType == "Bilateral":
-        padrao = [0, 1, 0, 2]
-    elif taskType == "Bilateral Simultâneo":
-        padrao = [0, 3]
+    if movement_type == "Misto" and mixed_types and len(mixed_types) > 0:
+        codes = [type_to_stimulus[t] for t in mixed_types if t in type_to_stimulus]
+        if not codes: codes = [1]
+        sequence = [random.choice(codes) for _ in range(num_trials)]
+    elif movement_type in ("Unilateral", "Mão Direita"):
+        sequence = [1] * num_trials
+    elif movement_type == "Bilateral":
+        pattern = [1, 2]
+        sequence = (pattern * ((num_trials // len(pattern)) + 1))[:num_trials]
+    elif movement_type == "Bilateral Simultâneo":
+        sequence = [3] * num_trials
+    elif movement_type == "Mão Esquerda":
+        sequence = [2] * num_trials
     else:
-        padrao = [0]
+        sequence = [1] * num_trials
 
-    reps = (num_trials // len(padrao)) + 1
-    sequencia = padrao * reps
-    return sequencia[:num_trials]
+    if randomize:
+        random.shuffle(sequence)
+    return sequence

@@ -1,8 +1,8 @@
 import json
-from models.experiment import FingerTappingStimulus
+from models.experiment import ExperimentStimulus
 import time
 
-def build_payload(payload: FingerTappingStimulus):
+def build_payload(payload: ExperimentStimulus):
     return json.dumps({"r": bool(payload.is_running), "c": payload.color, "i": payload.instruction})
 
 async def broadcast_state(app, payload):

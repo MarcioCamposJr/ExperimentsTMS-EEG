@@ -7,157 +7,259 @@
     <link rel="stylesheet" href="/static/configExp/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-
-    <div class="main-container">
-        <header class="header">
+    <div class="app">
+        <!-- ===== HEADER ===== -->
+        <header class="app-header">
             <h1>TMS and EEG Experiment</h1>
+            <div class="header-controls">
+                <div class="task-selector" id="task-list"></div>
+                <div class="sep"></div>
+                <div class="inline-field">
+                    <label for="num-trials">Trials</label>
+                    <input type="number" id="num-trials" value="10" min="1" class="input-sm">
+                </div>
+                <div class="inline-field">
+                    <label>Rand</label>
+                    <label class="switch">
+                        <input type="checkbox" id="randomize-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="inline-field" id="seed-group" style="display:none">
+                    <label for="seed-value">Seed</label>
+                    <input type="number" id="seed-value" placeholder="42" min="0" class="input-sm">
+                </div>
+                <div class="sep"></div>
+                <button class="start-button" id="start-button">START</button>
+            </div>
         </header>
 
-        <main class="content">
-            <div class="config-layout">
-                <section class="card task-selection">
-                    <div class= "card-header">  
-                        <h2>Task</h2>
-                    </div> 
-                    <div class="task-list">
+        <!-- ===== PROTOCOL DIAGRAM ===== -->
+        <section class="diagram-section">
+            <div class="diagram-wrapper">
+                <div class="phase-block" data-phase="rest" id="block-rest" tabindex="0">
+                    <div class="block-bar block-bar--rest"></div>
+                    <div class="block-body">
+                        <span class="block-name">Repouso</span>
+                        <span class="block-time" id="rest-time-label">5s</span>
+                        <div class="block-pulse-info" id="rest-pulse-label">—</div>
+                        <div class="block-timeline" id="rest-timeline"><div class="timeline-track"></div></div>
                     </div>
+                </div>
+                <div class="diagram-arrow"><svg viewBox="0 0 30 20" width="30" height="20"><polyline points="0,10 20,10" stroke="#555" stroke-width="2.5" fill="none"/><polygon points="20,4 30,10 20,16" fill="#555"/></svg></div>
+                <div class="phase-block" data-phase="prep" id="block-prep" tabindex="0">
+                    <div class="block-bar block-bar--prep"></div>
+                    <div class="block-body">
+                        <span class="block-name">Preparo</span>
+                        <span class="block-time" id="prep-time-label">3s</span>
+                        <div class="block-pulse-info" id="prep-pulse-label">—</div>
+                        <div class="block-timeline" id="prep-timeline"><div class="timeline-track"></div></div>
+                    </div>
+                </div>
+                <div class="diagram-arrow"><svg viewBox="0 0 30 20" width="30" height="20"><polyline points="0,10 20,10" stroke="#555" stroke-width="2.5" fill="none"/><polygon points="20,4 30,10 20,16" fill="#555"/></svg></div>
+                <div class="phase-block" data-phase="task" id="block-task" tabindex="0">
+                    <div class="block-bar block-bar--task"></div>
+                    <div class="block-body">
+                        <span class="block-name">Tarefa</span>
+                        <span class="block-time" id="task-time-label">5s</span>
+                        <div class="block-pulse-info" id="task-pulse-label">—</div>
+                        <div class="block-timeline" id="task-timeline"><div class="timeline-track"></div></div>
+                    </div>
+                </div>
+                <div class="diagram-repeat">× <strong id="trial-count-display">10</strong></div>
+            </div>
+            <p class="diagram-hint">Clique em um bloco para configurar</p>
+        </section>
 
-                    <div class="task-settings-content">
-                        <div class="settings-grid">
-                            <div class="form-group">
-                                <label for="num-trials">Número de trials</label>
-                                <input type="number" id="num-trials" name="num-trials" value="10">
-                            </div>
-                            <div class="form-group">
-                                <label for="trial-duration">Tempo de cada trial (s)</label>
-                                <input type="number" id="trial-duration" name="trial-duration" value="5">
-                            </div>
-                            <div class="form-group">
-                                <label for="prep-duration">Tempo de preparo (s)</label>
-                                <input type="number" id="prep-duration" name="prep-duration" value="3" min="0" step="1">
-                            </div>
-                            <div class="form-group" id="trial-type-gruop">
-                                <label>Tipos de tarefa</label>
-                                <div class="checkbox-group" id="task-type-checkboxes">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" name="task-type" value="Mão Direita" checked>
-                                        <span>Mão Direita</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" name="task-type" value="Mão Esquerda">
-                                        <span>Mão Esquerda</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" name="task-type" value="Bilateral Simultâneo">
-                                        <span>Bilateral Simultâneo</span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="card arduino-settings">
-                    <div class= "card-header">  
-                        <h2>Trigger System</h2>
-                    </div>
-                    <div class="arduino-grid">
-                        <div class="form-group">
-                            <label for="arduino-port">Port</label>
-                            <select id="arduino-port" name="arduino-port">
-                                <!-- Options will be populated by JavaScript -->
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="arduino-baudrate">Baudrate</label>
-                            <input type="number" id="arduino-baudrate" name="arduino-baudrate" value="9600">
-                        </div>
-                    </div>
-                    <button class="connect-button" id="connect-buttom-trigger">Conectar</button>
-                    <div class="connection-status">
+        <!-- ===== HARDWARE (two blocks) ===== -->
+        <section class="hardware-grid">
+            <!-- TRIGGER CARD -->
+            <div class="hw-card" id="trigger-hw">
+                <div class="hw-card-header">
+                    <h3>Trigger (ESP32)</h3>
+                    <div class="hw-card-status">
                         <span class="status-indicator"></span>
                         <span class="status-text">Desconectado</span>
                     </div>
-                </section>
+                </div>
+                <div class="hw-card-body">
+                    <div class="hw-card-row">
+                        <select id="arduino-port" class="hw-select"></select>
+                        <input type="number" id="arduino-baudrate" value="9600" class="hw-input-sm">
+                    </div>
+                    <div class="hw-card-row">
+                        <button class="hw-btn" id="connect-buttom-trigger">Conectar</button>
+                        <button class="hw-btn hw-btn-config" id="trigger-config-btn">⚙ Códigos</button>
+                    </div>
+                </div>
+            </div>
 
-                <section class="card tms-settings">
-                    <div class="card-header">
-                        <h2>TMS</h2>
-                        <div class="connection-status">
+            <!-- TMS + NAVIGATION CARD -->
+            <div class="hw-card" id="tms-hw">
+                <div class="hw-card-header">
+                    <h3>TMS</h3>
+                    <div class="hw-card-status">
+                        <span class="status-indicator"></span>
+                        <span class="status-text">Desconectado</span>
+                    </div>
+                </div>
+                <div class="hw-card-body">
+                    <div class="hw-card-row">
+                        <select id="tms-port" class="hw-select"></select>
+                        <button class="hw-btn" id="connect-buttom-tms">Conectar</button>
+                    </div>
+                    <div class="hw-card-row">
+                        <button class="hw-btn tms-toggle-button" id="tms-toggle-button">Ativar TMS</button>
+                        <div class="inline-field">
+                            <label for="tms-intensity">Intens.</label>
+                            <input type="number" id="tms-intensity" value="50" min="0" max="100" class="hw-input-sm">
+                            <span class="hw-unit">%</span>
+                        </div>
+                        <button class="hw-btn" id="tms-intensity-btn">Aplicar</button>
+                    </div>
+                    <div class="hw-card-row hw-nav-row">
+                        <div class="hw-nav-status" id="nav-hw">
                             <span class="status-indicator"></span>
-                            <span class="status-text">Desconectado</span>
+                            <span class="status-text nav-status-text">Nav: Desconectado</span>
                         </div>
+                        <button class="hw-btn hw-btn-config" id="nav-config-btn">⚙ Navegação</button>
                     </div>
-                    <div class="tms-body">
-                        <div class="tms-main-controls">
-                            <div class="tms-connection-grid">
-                                <div class="form-group">
-                                    <label for="tms-port">Port</label>
-                                    <select id="tms-port" name="tms-port">
-                                        <!-- Options will be populated by JavaScript -->
-                                    </select>
-                                </div>
-                                <button class="connect-button" id="connect-buttom-tms">Conectar</button>
-                            </div>
-                            <div class="tms-controls-grid">
-                                <div class="form-group">
-                                    <label>Ativação</label>
-                                    <button class="tms-toggle-button">Ativar TMS</button>
-                                </div>
-                                <div class="form-group">
-                                    <label for="tms-stim-time-min">TMS mín (ms)</label>
-                                    <input type="number" id="tms-stim-time-min" name="tms-stim-time-min" value="100" min="0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="tms-stim-time-max">TMS máx (ms)</label>
-                                    <input type="number" id="tms-stim-time-max" name="tms-stim-time-max" value="500" min="0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="num-tms-pulses">Qtd. de pulsos</label>
-                                    <input type="number" id="num-tms-pulses" name="num-tms-pulses" value="1" min="1">
-                                </div>
-                                <div class="form-group">
-                                    <label for="tms-pulse-interval">Intervalo entre pulsos (ms)</label>
-                                    <input type="number" id="tms-pulse-interval" name="tms-pulse-interval" value="100" min="0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="tms-intercalate">Intercalar entre trials</label>
-                                    <label class="switch">
-                                        <input type="checkbox" id="tms-intercalate" name="tms-intercalate" disabled>
-                                        <span class="slider"></span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="navigation-system-content">
-                            <div class="card-sub-header">
-                                <h3>Navigation System</h3>
-                            </div>
-                            <div class="navigation-grid">
-                                <div class="form-group">
-                                    <label for="nav-system-link">Link</label>
-                                    <input type="text" id="nav-system-link" name="nav-system-link" placeholder="http://...">
-                                </div>
-                                <button class="connect-button" id="connect-buttom-navigation">Conectar</button>
-                            </div>
-                            <div class="connection-status">
-                                <span class="status-indicator"></span>
-                                <span class="status-text">Desconectado</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
+                </div>
             </div>
-
-            <div class="start-button-container">
-                <button class="start-button">START</button>
-            </div>
-        </main>
+        </section>
     </div>
+
+    <!-- ===== PHASE MODAL ===== -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal" id="phase-modal">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <span class="modal-dot" id="modal-dot"></span>
+                    <h3 id="modal-title">Configurar Fase</h3>
+                </div>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-row">
+                    <div class="form-group">
+                        <label for="modal-duration">Duração (s)</label>
+                        <input type="number" id="modal-duration" value="5" min="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-jitter">Jitter ±(s)</label>
+                        <input type="number" id="modal-jitter" value="0" min="0" step="0.1">
+                    </div>
+                </div>
+                <div id="modal-task-types" class="modal-section" style="display:none">
+                    <span class="section-label">Tipos de tarefa</span>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label"><input type="checkbox" name="modal-task-type" value="Mão Direita" checked><span>Mão Direita</span></label>
+                        <label class="checkbox-label"><input type="checkbox" name="modal-task-type" value="Mão Esquerda"><span>Mão Esquerda</span></label>
+                        <label class="checkbox-label"><input type="checkbox" name="modal-task-type" value="Bilateral Simultâneo"><span>Bilateral Simultâneo</span></label>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="pulse-header-row">
+                        <div class="pulse-left">
+                            <span class="section-label">Pulsos TMS</span>
+                            <label class="switch">
+                                <input type="checkbox" id="modal-pulse-enabled">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="pulse-right" id="pulse-count-group" style="display:none">
+                            <label for="modal-pulse-count">Qtd.</label>
+                            <input type="number" id="modal-pulse-count" value="1" min="1" max="10" class="input-sm">
+                        </div>
+                    </div>
+                    <div id="pulse-rows-container" style="display:none"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" id="modal-cancel">Cancelar</button>
+                <button class="modal-btn save" id="modal-save">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TRIGGER CODES MODAL ===== -->
+    <div class="modal-overlay" id="trigger-modal-overlay">
+        <div class="modal" id="trigger-modal">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <span class="modal-dot" style="background:#00BFFF"></span>
+                    <h3>Códigos de Trigger (ESP32)</h3>
+                </div>
+                <button class="modal-close" id="trigger-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Código numérico (1-16) enviado ao ESP32 para cada estado do protocolo.</p>
+                <div class="trigger-codes-grid">
+                    <div class="form-group">
+                        <label for="tc-rest">Repouso</label>
+                        <input type="number" id="tc-rest" value="1" min="1" max="16">
+                    </div>
+                    <div class="form-group">
+                        <label for="tc-prep">Preparo</label>
+                        <input type="number" id="tc-prep" value="2" min="1" max="16">
+                    </div>
+                    <div class="form-group">
+                        <label for="tc-task-right">Mão Direita</label>
+                        <input type="number" id="tc-task-right" value="3" min="1" max="16">
+                    </div>
+                    <div class="form-group">
+                        <label for="tc-task-left">Mão Esquerda</label>
+                        <input type="number" id="tc-task-left" value="4" min="1" max="16">
+                    </div>
+                    <div class="form-group">
+                        <label for="tc-task-bilateral">Bilateral Simult.</label>
+                        <input type="number" id="tc-task-bilateral" value="5" min="1" max="16">
+                    </div>
+                    <div class="form-group">
+                        <label for="tc-tms-pulse">Pulso TMS</label>
+                        <input type="number" id="tc-tms-pulse" value="10" min="1" max="16">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" id="trigger-modal-cancel">Cancelar</button>
+                <button class="modal-btn save" id="trigger-modal-save">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== NAVIGATION MODAL ===== -->
+    <div class="modal-overlay" id="nav-modal-overlay">
+        <div class="modal" id="nav-modal">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <span class="modal-dot" style="background:#28a745"></span>
+                    <h3>Configurar Navegação</h3>
+                </div>
+                <button class="modal-close" id="nav-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="nav-system-link">Endereço do sistema</label>
+                    <input type="text" id="nav-system-link" placeholder="http://192.168.0.10:5000">
+                </div>
+                <div class="nav-modal-actions">
+                    <button class="hw-btn" id="connect-buttom-navigation">Conectar</button>
+                    <div class="hw-nav-status" id="nav-modal-status">
+                        <span class="status-indicator" id="nav-modal-indicator"></span>
+                        <span class="status-text" id="nav-modal-text">Desconectado</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn save" id="nav-modal-done">Fechar</button>
+            </div>
+        </div>
+    </div>
+
 <script type="module" src="/utils/updateStates.js"></script>
 <script type="module" src="/static/configExp/config.js"></script>
 </body>

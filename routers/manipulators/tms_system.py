@@ -27,3 +27,12 @@ async def enable_tms(config: tms_models.TmsEnableConfig, request: Request):
     request.app.state.experiment['tms']= config.enable
     await tms.enable(config.enable)
     return {"status": "ok"}
+
+@tms_routers.post("/set-tms-intensity")
+async def set_tms_intensity(config: dict, request: Request):
+    intensity = config.get("intensity", 50)
+    intensity = max(0, min(100, int(intensity)))
+    request.app.state.experiment['tms_intensity'] = intensity
+    await tms.set_intensity(intensity)
+    return {"status": "ok", "intensity": intensity}
+

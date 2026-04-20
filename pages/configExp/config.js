@@ -1,213 +1,397 @@
 import { updateStatusIndicator, fetchAndPopulateDropdown, handleDeviceConnection, checkDeviceStatus } from '/utils/updateStates.js';
 
 const TASK_CONFIG = [
-    {
-        id: 'finger_tapping',
-        name: 'Finger Tapping',
-        trialTypes: ['Unilateral', 'Bilateral', 'Bilateral Simultâneo']
+    { id: 'finger_tapping', name: 'Finger Tapping', hasMovementTypes: true },
+];
+
+// ===== STATE =====
+const phaseState = {
+    rest: {
+        duration: 5, jitter: 0,
+        pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] }
     },
-]
+    prep: {
+        duration: 3, jitter: 0,
+        pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] }
+    },
+    task: {
+        duration: 5, jitter: 0,
+        pulse: { enabled: false, points: [{ position: 500, jitter: 0 }] },
+        taskTypes: ['Mão Direita']
+    }
+};
+
+const triggerCodes = {
+    rest: 1, prep: 2, task_right: 3, task_left: 4, task_bilateral: 5, tms_pulse: 10
+};
+
+let currentModalPhase = null;
+let isTmsActive = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const taskListContainer = document.querySelector('.task-list');
-    const trialTypeGroup = document.getElementById('trial-type-gruop');
-    const trialTypeSelect = document.getElementById('trial-type');
+    const taskListContainer = document.getElementById('task-list');
+    const numTrials = document.getElementById('num-trials');
+    const randomizeToggle = document.getElementById('randomize-toggle');
+    const seedGroup = document.getElementById('seed-group');
+    const seedValue = document.getElementById('seed-value');
+    const trialCountDisplay = document.getElementById('trial-count-display');
 
-    const arduinoPort= document.getElementById('arduino-port');
-    const arduinoBaudrate = document.getElementById('arduino-baudrate');
-    const triggerConnectButtom = document.querySelector('.arduino-settings .connect-button');
-    const triggerStatusIndicator = document.querySelector('.arduino-settings .status-indicator');
-    const triggerStatusText = document.querySelector('.arduino-settings .status-text');
+    // Phase modal refs
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modalDot = document.getElementById('modal-dot');
+    const modalTitle = document.getElementById('modal-title');
+    const modalDuration = document.getElementById('modal-duration');
+    const modalJitter = document.getElementById('modal-jitter');
+    const modalTaskTypes = document.getElementById('modal-task-types');
+    const modalPulseEnabled = document.getElementById('modal-pulse-enabled');
+    const pulseCountGroup = document.getElementById('pulse-count-group');
+    const modalPulseCount = document.getElementById('modal-pulse-count');
+    const pulseRowsContainer = document.getElementById('pulse-rows-container');
 
-    const tmsPort = document.getElementById('tms-port');
-    const tmsConnectButtom = document.getElementById('connect-buttom-tms');
-    const tmsStatusIndicator = document.querySelector('.tms-settings .status-indicator');
-    const tmsStatusText = document.querySelector('.tms-settings .status-text');
+    // Trigger modal ref
+    const triggerModalOverlay = document.getElementById('trigger-modal-overlay');
 
-    const tmsStartButton = document.querySelector('.tms-toggle-button');
+    // Navigation modal ref
+    const navModalOverlay = document.getElementById('nav-modal-overlay');
 
-    const navigationLink = document.getElementById("nav-system-link");
-    const navigationButton = document.getElementById("connect-buttom-navigation");
-    const navigationStatusIndicator = document.querySelector('.navigation-system-content .status-indicator');
-    const navigationStatusText = document.querySelector('.navigation-system-content .status-text');
+    const startButton = document.getElementById('start-button');
+    const tmsToggleButton = document.getElementById('tms-toggle-button');
 
-    const startButton = document.querySelector('.start-button'); 
+    // Hardware status refs (new card structure)
+    const triggerIndicator = document.querySelector('#trigger-hw .hw-card-status .status-indicator');
+    const triggerText = document.querySelector('#trigger-hw .hw-card-status .status-text');
+    const tmsIndicator = document.querySelector('#tms-hw .hw-card-status .status-indicator');
+    const tmsText = document.querySelector('#tms-hw .hw-card-status .status-text');
 
-    let isTmsActive = false;
+    // Navigation status — in TMS card row AND in modal
+    const navIndicator = document.querySelector('#nav-hw .status-indicator');
+    const navText = document.querySelector('#nav-hw .status-text');
+    const navModalIndicator = document.getElementById('nav-modal-indicator');
+    const navModalText = document.getElementById('nav-modal-text');
 
-    function updateTmsButtonState() {
-        if (isTmsActive) {
-            tmsStartButton.classList.add('active');
-            tmsStartButton.textContent = 'Desativar TMS';
-        } else {
-            tmsStartButton.classList.remove('active');
-            tmsStartButton.textContent = 'Ativar TMS';
-        }
-    }
+    // ===== DIAGRAM =====
+    function updateDiagram() {
+        for (const phase of ['rest', 'prep', 'task']) {
+            const s = phaseState[phase];
+            const timeLabel = document.getElementById(`${phase}-time-label`);
+            let txt = `${s.duration}s`;
+            if (s.jitter > 0) txt += ` ± ${s.jitter}s`;
+            timeLabel.textContent = txt;
 
-    function updateUIForTask(taskId){
-        const selectedTask = TASK_CONFIG.find(task => task.id === taskId);
-
-        if(!selectedTask){
-            console.error('Configuração de tarefa não encontrada');
-            return
-        }
-        // Os checkboxes agora são estáticos no HTML, então apenas mostramos/escondemos o grupo
-        if(selectedTask.trialTypes.length > 0){
-            trialTypeGroup.style.display = 'block';
-        }else {
-            trialTypeGroup.style.display = 'none';
-        }
-    }
-
-    function initializeTaskButtons(){
-        taskListContainer.innerHTML = '';
-
-        TASK_CONFIG.forEach((task, index) => {
-            const button = document.createElement('button');
-            button.className = 'task-button';
-            button.textContent = task.name;
-            button.dataset.taskId = task.id;
-            
-            if (index === 0){
-                button.classList.add('selected');
+            const pulseLabel = document.getElementById(`${phase}-pulse-label`);
+            if (s.pulse.enabled && s.pulse.points.length > 0) {
+                pulseLabel.textContent = `⚡ × ${s.pulse.points.length}`;
+            } else {
+                pulseLabel.textContent = '—';
             }
-            
-            button.addEventListener('click', () => {
-                document.querySelectorAll('.task-button').forEach(btn => btn.classList.remove('selected'));
-                button.classList.add('selected');
-                updateUIForTask(task.id);
+
+            const track = document.getElementById(`${phase}-timeline`).querySelector('.timeline-track');
+            track.querySelectorAll('.timeline-region, .timeline-marker').forEach(el => el.remove());
+
+            if (s.pulse.enabled && s.duration > 0) {
+                const durMs = s.duration * 1000;
+                for (const p of s.pulse.points) {
+                    const centerPct = Math.min(98, Math.max(1, (p.position / durMs) * 100));
+                    if (p.jitter > 0) {
+                        const leftPct = Math.max(0, ((p.position - p.jitter) / durMs) * 100);
+                        const rightPct = Math.min(100, ((p.position + p.jitter) / durMs) * 100);
+                        const region = document.createElement('div');
+                        region.className = 'timeline-region';
+                        region.style.left = `${leftPct}%`;
+                        region.style.width = `${Math.max(2, rightPct - leftPct)}%`;
+                        track.appendChild(region);
+                    }
+                    const marker = document.createElement('div');
+                    marker.className = 'timeline-marker';
+                    marker.style.left = `${centerPct}%`;
+                    track.appendChild(marker);
+                }
+            }
+        }
+        trialCountDisplay.textContent = numTrials.value;
+    }
+
+    // ===== PHASE MODAL =====
+    const phaseNames = { rest: 'Repouso', prep: 'Preparo', task: 'Tarefa' };
+    const phaseColors = { rest: '#7a7a85', prep: '#e6b800', task: '#00BFFF' };
+
+    function renderPulseRows(count) {
+        pulseRowsContainer.innerHTML = '';
+        if (!currentModalPhase) return;
+        const points = phaseState[currentModalPhase].pulse.points;
+        for (let i = 0; i < count; i++) {
+            const existing = points[i] || { position: 500, jitter: 0 };
+            const row = document.createElement('div');
+            row.className = 'pulse-row';
+            row.innerHTML = `
+                <span class="pulse-row-label">P${i + 1}</span>
+                <div class="form-group">
+                    <label>Posição (ms)</label>
+                    <input type="number" class="pulse-pos-input" data-index="${i}" value="${existing.position}" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Jitter ±(ms)</label>
+                    <input type="number" class="pulse-jitter-input" data-index="${i}" value="${existing.jitter}" min="0">
+                </div>
+            `;
+            pulseRowsContainer.appendChild(row);
+        }
+    }
+
+    function openPhaseModal(phase) {
+        currentModalPhase = phase;
+        const s = phaseState[phase];
+        modalDot.style.background = phaseColors[phase];
+        modalTitle.textContent = `Configurar ${phaseNames[phase]}`;
+        modalDuration.value = s.duration;
+        modalJitter.value = s.jitter;
+        modalPulseEnabled.checked = s.pulse.enabled;
+        const showPulse = s.pulse.enabled;
+        pulseCountGroup.style.display = showPulse ? 'flex' : 'none';
+        pulseRowsContainer.style.display = showPulse ? 'flex' : 'none';
+        modalPulseCount.value = s.pulse.points.length;
+        if (showPulse) renderPulseRows(s.pulse.points.length);
+        if (phase === 'task') {
+            modalTaskTypes.style.display = 'block';
+            document.querySelectorAll('input[name="modal-task-type"]').forEach(cb => {
+                cb.checked = s.taskTypes?.includes(cb.value) || false;
             });
-            taskListContainer.appendChild(button);
+        } else {
+            modalTaskTypes.style.display = 'none';
+        }
+        modalOverlay.classList.add('active');
+    }
+
+    function closePhaseModal() {
+        modalOverlay.classList.remove('active');
+        currentModalPhase = null;
+    }
+
+    function savePhaseModal() {
+        if (!currentModalPhase) return;
+        const s = phaseState[currentModalPhase];
+        s.duration = parseFloat(modalDuration.value) || 0;
+        s.jitter = parseFloat(modalJitter.value) || 0;
+        s.pulse.enabled = modalPulseEnabled.checked;
+        if (s.pulse.enabled) {
+            const posInputs = pulseRowsContainer.querySelectorAll('.pulse-pos-input');
+            const jitterInputs = pulseRowsContainer.querySelectorAll('.pulse-jitter-input');
+            s.pulse.points = [];
+            for (let i = 0; i < posInputs.length; i++) {
+                s.pulse.points.push({
+                    position: parseFloat(posInputs[i].value) || 0,
+                    jitter: parseFloat(jitterInputs[i].value) || 0,
+                });
+            }
+        }
+        if (currentModalPhase === 'task') {
+            s.taskTypes = Array.from(document.querySelectorAll('input[name="modal-task-type"]:checked')).map(cb => cb.value);
+        }
+        updateDiagram();
+        closePhaseModal();
+    }
+
+    document.querySelectorAll('.phase-block').forEach(block => {
+        block.addEventListener('click', () => openPhaseModal(block.dataset.phase));
+    });
+    document.getElementById('modal-close').addEventListener('click', closePhaseModal);
+    document.getElementById('modal-cancel').addEventListener('click', closePhaseModal);
+    document.getElementById('modal-save').addEventListener('click', savePhaseModal);
+    modalPulseEnabled.addEventListener('change', () => {
+        const show = modalPulseEnabled.checked;
+        pulseCountGroup.style.display = show ? 'flex' : 'none';
+        pulseRowsContainer.style.display = show ? 'flex' : 'none';
+        if (show) renderPulseRows(parseInt(modalPulseCount.value) || 1);
+    });
+    modalPulseCount.addEventListener('input', () => {
+        renderPulseRows(Math.max(1, Math.min(10, parseInt(modalPulseCount.value) || 1)));
+    });
+
+    // ===== TRIGGER CODES MODAL =====
+    function openTriggerModal() {
+        document.getElementById('tc-rest').value = triggerCodes.rest;
+        document.getElementById('tc-prep').value = triggerCodes.prep;
+        document.getElementById('tc-task-right').value = triggerCodes.task_right;
+        document.getElementById('tc-task-left').value = triggerCodes.task_left;
+        document.getElementById('tc-task-bilateral').value = triggerCodes.task_bilateral;
+        document.getElementById('tc-tms-pulse').value = triggerCodes.tms_pulse;
+        triggerModalOverlay.classList.add('active');
+    }
+    function closeTriggerModal() { triggerModalOverlay.classList.remove('active'); }
+    function saveTriggerModal() {
+        triggerCodes.rest = parseInt(document.getElementById('tc-rest').value) || 1;
+        triggerCodes.prep = parseInt(document.getElementById('tc-prep').value) || 2;
+        triggerCodes.task_right = parseInt(document.getElementById('tc-task-right').value) || 3;
+        triggerCodes.task_left = parseInt(document.getElementById('tc-task-left').value) || 4;
+        triggerCodes.task_bilateral = parseInt(document.getElementById('tc-task-bilateral').value) || 5;
+        triggerCodes.tms_pulse = parseInt(document.getElementById('tc-tms-pulse').value) || 10;
+        closeTriggerModal();
+    }
+    document.getElementById('trigger-config-btn').addEventListener('click', openTriggerModal);
+    document.getElementById('trigger-modal-close').addEventListener('click', closeTriggerModal);
+    document.getElementById('trigger-modal-cancel').addEventListener('click', closeTriggerModal);
+    document.getElementById('trigger-modal-save').addEventListener('click', saveTriggerModal);
+
+    // ===== NAVIGATION MODAL =====
+    function openNavModal() { navModalOverlay.classList.add('active'); }
+    function closeNavModal() { navModalOverlay.classList.remove('active'); }
+
+    document.getElementById('nav-config-btn').addEventListener('click', openNavModal);
+    document.getElementById('nav-modal-close').addEventListener('click', closeNavModal);
+    document.getElementById('nav-modal-done').addEventListener('click', closeNavModal);
+
+    // Sync nav status between card row and modal
+    function updateNavStatus(indicator, text) {
+        // Also update the inline nav status in TMS card
+        if (indicator) {
+            const isConnected = indicator.classList.contains('connected');
+            navIndicator.className = indicator.className;
+            navText.textContent = 'Nav: ' + (isConnected ? 'Conectado' : 'Desconectado');
+        }
+    }
+
+    document.getElementById('connect-buttom-navigation').addEventListener('click', async () => {
+        const val = document.getElementById('nav-system-link').value;
+        const [addr, port] = val.replace('http://', '').split(':');
+        await handleDeviceConnection('/connect-navigation', {
+            address: addr, port: parseInt(port)
+        }, navModalIndicator, navModalText, 'Conectado', 'Desconectado');
+        // Sync to card
+        const isConn = navModalIndicator.classList.contains('connected');
+        navIndicator.classList.toggle('connected', isConn);
+        navText.textContent = 'Nav: ' + (isConn ? 'Conectado' : 'Desconectado');
+    });
+
+    // ===== HEADER CONTROLS =====
+    randomizeToggle.addEventListener('change', () => {
+        seedGroup.style.display = randomizeToggle.checked ? 'flex' : 'none';
+        if (!randomizeToggle.checked) seedValue.value = '';
+    });
+    numTrials.addEventListener('input', () => { trialCountDisplay.textContent = numTrials.value; });
+
+    // ===== TASK BUTTONS =====
+    function initializeTaskButtons() {
+        taskListContainer.innerHTML = '';
+        TASK_CONFIG.forEach((task, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'task-button';
+            btn.textContent = task.name;
+            btn.dataset.taskId = task.id;
+            if (i === 0) btn.classList.add('selected');
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.task-button').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+            });
+            taskListContainer.appendChild(btn);
         });
     }
 
-    // --- Event Listeners ---
-
-    triggerConnectButtom.addEventListener('click', async () => {
-        const config = {
-            port: arduinoPort.value,
-            boudrate: parseInt(arduinoBaudrate.value || 9600)
-        };
-        await handleDeviceConnection('/connect-trigger', config, triggerStatusIndicator, triggerStatusText, 'Conectado', 'Desconectado');
+    // ===== HARDWARE =====
+    document.getElementById('connect-buttom-trigger').addEventListener('click', async () => {
+        await handleDeviceConnection('/connect-trigger', {
+            port: document.getElementById('arduino-port').value,
+            boudrate: parseInt(document.getElementById('arduino-baudrate').value || 9600)
+        }, triggerIndicator, triggerText, 'Conectado', 'Desconectado');
     });
 
-    tmsConnectButtom.addEventListener('click', async () => {
-        const config = {
-            port: tmsPort.value,
-            port_name: tmsPort.options[tmsPort.selectedIndex].textContent
-        };
-        await handleDeviceConnection('/connect-tms', config, tmsStatusIndicator, tmsStatusText, 'Conectado', 'Desconectado');
+    document.getElementById('connect-buttom-tms').addEventListener('click', async () => {
+        const sel = document.getElementById('tms-port');
+        await handleDeviceConnection('/connect-tms', {
+            port: sel.value, port_name: sel.options[sel.selectedIndex]?.textContent || ''
+        }, tmsIndicator, tmsText, 'Conectado', 'Desconectado');
     });
 
-    navigationButton.addEventListener('click', async () => {
-        const navLinkValue = navigationLink.value;
-        const [address, port] = navLinkValue.replace('http://', '').split(':');
-        const config = {
-            address: address,
-            port: parseInt(port)
-        };
-        await handleDeviceConnection('/connect-navigation', config, navigationStatusIndicator, navigationStatusText, 'Conectado', 'Desconectado');
-    });
-
-    startButton.addEventListener('click', async () => {
-        const selectedCheckboxes = document.querySelectorAll('input[name="task-type"]:checked');
-        const selectedTasks = Array.from(selectedCheckboxes).map(cb => cb.value);
-
-        let movementType = 'Unilateral';
-        if (selectedTasks.length === 1) {
-            movementType = selectedTasks[0];
-        } else if (selectedTasks.length > 1) {
-            movementType = 'Misto';
-        } else {
-            // Default caso nenhum selecionado
-            movementType = 'Mão Direita';
-            selectedTasks.push('Mão Direita');
-        }
-
-        const config = {
-            num_trials: parseInt(document.getElementById('num-trials').value || 10),
-            task_duration_seconds: parseInt(document.getElementById('trial-duration').value || 5),
-            rest_duration_seconds: parseInt(document.getElementById('trial-duration').value || 5),
-            prep_duration_seconds: parseInt(document.getElementById('prep-duration').value || 3),
-            movement_type: movementType,
-            mixed_task_types: selectedTasks,
-            tms_time_min: parseInt(document.getElementById('tms-stim-time-min').value || 0),
-            tms_time_max: parseInt(document.getElementById('tms-stim-time-max').value || 0),
-            num_tms_pulses: parseInt(document.getElementById('num-tms-pulses').value || 1),
-            tms_pulse_interval: parseInt(document.getElementById('tms-pulse-interval').value || 100),
-            tms_time: 0 // Fallback
-        };
-        
-        try{
-            const response = await fetch('/set-config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json', 
-                },
-                body: JSON.stringify(config) 
-            });
-            if (!response.ok) {
-                throw new Error(`Erro ao enviar configuração: ${response.status} ${response.statusText}`);
-            }
-            const data = await response.json();
-            console.log('Resposta do servidor:', data);
-            window.location.href ='/monitor';
-        }catch (error) {
-            console.error('Erro ao enviar configuração:', error);
-        }
-    });
-
-    tmsStartButton.addEventListener('click', async () => {
+    tmsToggleButton.addEventListener('click', async () => {
         isTmsActive = !isTmsActive;
-        const config = {'enable': isTmsActive};
         try {
-            const response = await fetch('/enable-tms',{
+            const resp = await fetch('/enable-tms', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json', 
-                },
-                body: JSON.stringify(config) 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enable: isTmsActive })
             });
-            if (!response.ok) {
-                isTmsActive = !isTmsActive; // Revert state on error
-                throw new Error(`Erro ao buscar dados: ${response.status} ${response.statusText}`);
-            }
-            updateTmsButtonState();
-        }catch (error) {
-            console.error('Erro ao enviar configuração:', error);
-        }
+            if (!resp.ok) { isTmsActive = !isTmsActive; return; }
+            tmsToggleButton.textContent = isTmsActive ? 'Desativar TMS' : 'Ativar TMS';
+            tmsToggleButton.classList.toggle('active', isTmsActive);
+        } catch (e) { isTmsActive = !isTmsActive; console.error(e); }
     });
 
-    // --- Initial Load and Checks ---
-
-    const checkTMSEnable = async() =>{
+    document.getElementById('tms-intensity-btn').addEventListener('click', async () => {
+        const intensity = parseInt(document.getElementById('tms-intensity').value) || 50;
         try {
-            const response = await fetch('/get-tms-status');
-            if (response.ok) {
-                const data = await response.json();
-                isTmsActive = data.is_active;
-            }
-            updateTmsButtonState();
-        }catch (error) {
-            console.error('Erro ao enviar configuração:', error);
+            await fetch('/set-tms-intensity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ intensity })
+            });
+        } catch (e) { console.error('Erro ao setar intensidade:', e); }
+    });
+
+    // ===== START =====
+    startButton.addEventListener('click', async () => {
+        const ts = phaseState.task;
+        let movementType = 'Unilateral';
+        const selected = ts.taskTypes || ['Mão Direita'];
+        if (selected.length === 1) movementType = selected[0];
+        else if (selected.length > 1) movementType = 'Misto';
+        else { movementType = 'Mão Direita'; selected.push('Mão Direita'); }
+
+        function buildPulseConfig(phase) {
+            const p = phaseState[phase].pulse;
+            return {
+                enabled: p.enabled,
+                pulses: p.points.map(pt => ({ position_ms: pt.position, jitter_ms: pt.jitter }))
+            };
         }
 
-    }
+        const config = {
+            task_type: document.querySelector('.task-button.selected')?.dataset.taskId || 'finger_tapping',
+            num_trials: parseInt(numTrials.value) || 10,
+            randomize: randomizeToggle.checked,
+            seed: seedValue.value ? parseInt(seedValue.value) : null,
+            rest: { duration_seconds: phaseState.rest.duration, jitter_seconds: phaseState.rest.jitter },
+            prep: { duration_seconds: phaseState.prep.duration, jitter_seconds: phaseState.prep.jitter },
+            task: { duration_seconds: phaseState.task.duration, jitter_seconds: phaseState.task.jitter },
+            pulse_rest: buildPulseConfig('rest'),
+            pulse_prep: buildPulseConfig('prep'),
+            pulse_task: buildPulseConfig('task'),
+            movement_type: movementType,
+            mixed_task_types: selected,
+            tms_intensity: parseInt(document.getElementById('tms-intensity').value) || 50,
+            trigger_codes: { ...triggerCodes },
+        };
 
+        try {
+            const resp = await fetch('/set-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            if (!resp.ok) throw new Error(`${resp.status}`);
+            window.location.href = '/monitor';
+        } catch (e) { console.error('Erro:', e); }
+    });
+
+    // ===== INIT =====
     try {
-        await fetchAndPopulateDropdown('/ports-tms', tmsPort, 'name', 'description');
-        await checkDeviceStatus('/get-connection-tms', tmsStatusIndicator, tmsStatusText, 'Conectado', 'Desconectado', { 'tms-port': 'port' });
-        await fetchAndPopulateDropdown('/ports-trigger', arduinoPort);
-        await checkDeviceStatus('/get-connection-trigger', triggerStatusIndicator, triggerStatusText, 'Conectado', 'Desconectado', { 'arduino-port': 'port_name', 'arduino-baudrate': 'boudrate' });
-        await checkDeviceStatus('/get-navigation-status', navigationStatusIndicator, navigationStatusText, 'Conectado', 'Desconectado', { 'nav-system-link': (status) => `http://${status.address}:${status.port}` });
-        await checkTMSEnable();
-    } catch (error) {
-        console.error("Erro durante a carga inicial ou verificação de conexão:", error);
-    } finally {
-        initializeTaskButtons();
-        if(TASK_CONFIG.length > 0){
-            updateUIForTask(TASK_CONFIG[0].id);
+        await fetchAndPopulateDropdown('/ports-tms', document.getElementById('tms-port'), 'name', 'description');
+        await checkDeviceStatus('/get-connection-tms', tmsIndicator, tmsText, 'Conectado', 'Desconectado', { 'tms-port': 'port' });
+        await fetchAndPopulateDropdown('/ports-trigger', document.getElementById('arduino-port'));
+        await checkDeviceStatus('/get-connection-trigger', triggerIndicator, triggerText, 'Conectado', 'Desconectado', { 'arduino-port': 'port_name', 'arduino-baudrate': 'boudrate' });
+        // Navigation — update both inline + modal status
+        await checkDeviceStatus('/get-navigation-status', navModalIndicator, navModalText, 'Conectado', 'Desconectado', { 'nav-system-link': (s) => `http://${s.address}:${s.port}` });
+        const navConn = navModalIndicator.classList.contains('connected');
+        navIndicator.classList.toggle('connected', navConn);
+        navText.textContent = 'Nav: ' + (navConn ? 'Conectado' : 'Desconectado');
+
+        const tmsResp = await fetch('/get-tms-status');
+        if (tmsResp.ok) {
+            const data = await tmsResp.json();
+            isTmsActive = data.is_active;
+            tmsToggleButton.textContent = isTmsActive ? 'Desativar TMS' : 'Ativar TMS';
+            tmsToggleButton.classList.toggle('active', isTmsActive);
         }
-    }
+    } catch (e) { console.error("Erro na carga inicial:", e); }
+
+    initializeTaskButtons();
+    updateDiagram();
 });

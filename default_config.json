@@ -1,0 +1,42 @@
+{
+  "num_trials": 10,
+  "task": "finger_tapping",
+  "randomize": false,
+  "seed": null,
+  "tms_intensity": 50,
+  "trigger_codes": {
+    "rest": 1,
+    "prep": 2,
+    "task_right": 3,
+    "task_left": 4,
+    "task_bilateral": 5,
+    "tms_pulse": 10
+  },
+  "phases": {
+    "rest": {
+      "duration": 5.0,
+      "jitter": 0.0,
+      "pulse": {
+        "enabled": false,
+        "points": [{ "position": 500, "jitter": 0 }]
+      }
+    },
+    "prep": {
+      "duration": 3.0,
+      "jitter": 0.0,
+      "pulse": {
+        "enabled": false,
+        "points": [{ "position": 500, "jitter": 0 }]
+      }
+    },
+    "task": {
+      "duration": 5.0,
+      "jitter": 0.0,
+      "pulse": {
+        "enabled": false,
+        "points": [{ "position": 500, "jitter": 0 }]
+      },
+      "taskTypes": ["Mão Direita"]
+    }
+  }
+}
