@@ -7,6 +7,68 @@ import json
 
 config_routers= APIRouter()
 
+
+def _save_config_to_file(config: experiment.ExperimentConfig):
+    """Persist the current config back to default_config.json so it is
+    automatically loaded next time the configuration page is opened."""
+    data = {
+        "num_trials": config.num_trials,
+        "task": config.task_type,
+        "randomize": config.randomize,
+        "seed": config.seed,
+        "tms_intensity": config.tms_intensity,
+        "trigger_codes": {
+            "rest": config.trigger_codes.rest,
+            "prep": config.trigger_codes.prep,
+            "task_right": config.trigger_codes.task_right,
+            "task_left": config.trigger_codes.task_left,
+            "task_bilateral": config.trigger_codes.task_bilateral,
+            "tms_pulse": config.trigger_codes.tms_pulse,
+        },
+        "phases": {
+            "rest": {
+                "duration": config.rest.duration_seconds,
+                "jitter": config.rest.jitter_seconds,
+                "pulse": {
+                    "enabled": config.pulse_rest.enabled,
+                    "points": [
+                        {"position": p.position_ms, "jitter": p.jitter_ms}
+                        for p in config.pulse_rest.pulses
+                    ],
+                },
+            },
+            "prep": {
+                "duration": config.prep.duration_seconds,
+                "jitter": config.prep.jitter_seconds,
+                "pulse": {
+                    "enabled": config.pulse_prep.enabled,
+                    "points": [
+                        {"position": p.position_ms, "jitter": p.jitter_ms}
+                        for p in config.pulse_prep.pulses
+                    ],
+                },
+            },
+            "task": {
+                "duration": config.task.duration_seconds,
+                "jitter": config.task.jitter_seconds,
+                "pulse": {
+                    "enabled": config.pulse_task.enabled,
+                    "points": [
+                        {"position": p.position_ms, "jitter": p.jitter_ms}
+                        for p in config.pulse_task.pulses
+                    ],
+                },
+                "taskTypes": config.mixed_task_types,
+            },
+        },
+    }
+    try:
+        with open("default_config.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[WARNING] Não foi possível salvar default_config.json: {e}")
+
+
 @config_routers.get("/default-config")
 async def get_default_config():
     try:
@@ -18,6 +80,9 @@ async def get_default_config():
 @config_routers.post("/set-config")
 async def set_config(config: experiment.ExperimentConfig, request: Request, background_tasks: BackgroundTasks):
     if not request.app.state.experiment['is_running']:
+        # Persist config so it survives across sessions
+        _save_config_to_file(config)
+
         sequence = generate_sequence(
             config.movement_type, config.num_trials,
             config.mixed_task_types, config.randomize, config.seed

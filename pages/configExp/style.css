@@ -347,7 +347,7 @@ input:disabled + .slider { background: #2a2a2a; }
     color: var(--text);
 }
 .hw-select { min-width: 7rem; flex: 1; }
-.hw-input-sm { width: 5rem; text-align: center; }
+.hw-input-sm { width: 7rem; text-align: center; }
 .hw-input-wide { flex: 1; min-width: 10rem; }
 .hw-select:focus, .hw-input-sm:focus, .hw-input-wide:focus { outline: none; border-color: var(--accent); }
 

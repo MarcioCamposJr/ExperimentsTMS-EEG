@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('connect-buttom-trigger').addEventListener('click', async () => {
         await handleDeviceConnection('/connect-trigger', {
             port: document.getElementById('arduino-port').value,
-            boudrate: parseInt(document.getElementById('arduino-baudrate').value || 9600)
+            boudrate: parseInt(document.getElementById('arduino-baudrate').value || 115200)
         }, triggerIndicator, triggerText, 'Conectado', 'Desconectado');
     });
 
@@ -373,7 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 seedGroup.style.display = defJson.randomize ? 'flex' : 'none';
             }
             if (defJson.seed) seedValue.value = defJson.seed;
-            
+
             if (defJson.trigger_codes) triggerCodes = { ...triggerCodes, ...defJson.trigger_codes };
             if (defJson.phases) {
                 // Ensure pulse points are structured properly

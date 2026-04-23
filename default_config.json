@@ -18,15 +18,25 @@
       "jitter": 0.0,
       "pulse": {
         "enabled": false,
-        "points": [{ "position": 500, "jitter": 0 }]
+        "points": [
+          {
+            "position": 500.0,
+            "jitter": 0.0
+          }
+        ]
       }
     },
     "prep": {
-      "duration": 3.0,
+      "duration": 4.0,
       "jitter": 0.0,
       "pulse": {
         "enabled": false,
-        "points": [{ "position": 500, "jitter": 0 }]
+        "points": [
+          {
+            "position": 500.0,
+            "jitter": 0.0
+          }
+        ]
       }
     },
     "task": {
@@ -34,9 +44,16 @@
       "jitter": 0.0,
       "pulse": {
         "enabled": false,
-        "points": [{ "position": 500, "jitter": 0 }]
+        "points": [
+          {
+            "position": 500.0,
+            "jitter": 0.0
+          }
+        ]
       },
-      "taskTypes": ["Mão Direita"]
+      "taskTypes": [
+        "Mão Direita"
+      ]
     }
   }
 }
