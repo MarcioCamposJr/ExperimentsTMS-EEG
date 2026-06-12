@@ -124,7 +124,7 @@ async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfi
     phase_start = time()
 
     while remaining > 0 and exp['status'] != ExperimentStatus.canceled:
-        while exp['status'] == ExperimentStatus.paused:
+        while exp['status'] == ExperimentStatus.paused or (navigation.navigation.is_connected() and not navigation.on_taget()):
             await asyncio.sleep(SLEEP_INTERVAL)
             if exp['status'] == ExperimentStatus.canceled:
                 return
@@ -137,16 +137,8 @@ async def _run_phase(app, duration, color, instruction, pulse_config: PulseConfi
 
         # Fire pulses at their scheduled times
         if fired_count < len(fire_times):
-            elapsed = time() - phase_start
-            if elapsed >= fire_times[fired_count]:
-                if navigation.navigation.is_connected():
-                    while not navigation.on_taget():
-                        while exp['status'] == ExperimentStatus.paused:
-                            await asyncio.sleep(SLEEP_INTERVAL)
-                            if exp['status'] == ExperimentStatus.canceled: break
-                        if exp['status'] == ExperimentStatus.canceled: break
-                        await asyncio.sleep(SLEEP_INTERVAL)
-
+            active_elapsed = duration - remaining
+            if active_elapsed >= fire_times[fired_count]:
                 if exp['status'] != ExperimentStatus.canceled:
                     trigger.pulse_tms_trigger(code=tms_trigger_code)
                     await asyncio.shield(tms.single_pulse())
@@ -180,7 +172,7 @@ async def _run_prep_phase(app, duration, pulse_config: PulseConfig, total_remain
 
     while remaining > 0:
         if exp['status'] == ExperimentStatus.canceled: return
-        while exp['status'] == ExperimentStatus.paused:
+        while exp['status'] == ExperimentStatus.paused or (navigation.navigation.is_connected() and not navigation.on_taget()):
             await asyncio.sleep(SLEEP_INTERVAL)
             if exp['status'] == ExperimentStatus.canceled: return
 
@@ -190,15 +182,8 @@ async def _run_prep_phase(app, duration, pulse_config: PulseConfig, total_remain
 
         # Fire pulses at scheduled times
         if fired_count < len(fire_times):
-            elapsed = time() - phase_start
-            if elapsed >= fire_times[fired_count]:
-                if navigation.navigation.is_connected():
-                    while not navigation.on_taget():
-                        while exp['status'] == ExperimentStatus.paused:
-                            await asyncio.sleep(SLEEP_INTERVAL)
-                            if exp['status'] == ExperimentStatus.canceled: break
-                        if exp['status'] == ExperimentStatus.canceled: break
-                        await asyncio.sleep(SLEEP_INTERVAL)
+            active_elapsed = duration - remaining
+            if active_elapsed >= fire_times[fired_count]:
                 if exp['status'] != ExperimentStatus.canceled:
                     trigger.pulse_tms_trigger(code=tms_trigger_code)
                     await asyncio.shield(tms.single_pulse())
